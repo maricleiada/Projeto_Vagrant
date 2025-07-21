@@ -65,7 +65,7 @@ As configurações foram automatizadas utilizando playbooks organizados na pasta
 - Permissão de uso do `sudo` para o grupo `ifpb`
 
 ### 📁 Servidor `arq`
-- DHCP (domínio `maricleia.devops`, faixa 192.168.56.50-200, DNS: 1.1.1.1 e 8.8.8.8)
+- DHCP (domínio `maricleia.devops`, faixa 192.168.56.50-100, DNS: 1.1.1.1 e 8.8.8.8)
 - LVM: VG `dados` com LV `ifpb` (15GB, ext4)
 - Compartilhamento NFS `/dados/nfs`:
   - Acesso apenas por `nfs-ifpb`
