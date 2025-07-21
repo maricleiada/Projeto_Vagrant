@@ -1,0 +1,110 @@
+---
+- hosts: arq
+  become: true
+  tasks:
+    - name: Instalar pacotes necessários
+      apt:
+        name:
+          - isc-dhcp-server
+          - nfs-kernel-server
+          - lvm2
+        state: present
+        update_cache: yes
+
+    - name: Criar volume físico nos discos
+      command: pvcreate /dev/sdb /dev/sdc /dev/sdd
+      args:
+        creates: /dev/sdb
+
+    - name: Criar volume group 'dados'
+      command: vgcreate dados /dev/sdb /dev/sdc /dev/sdd
+      args:
+        creates: /etc/lvm/backup/dados
+
+    - name: Criar logical volume 'ifpb'
+      command: lvcreate -L 15G -n ifpb dados
+      args:
+        creates: /dev/dados/ifpb
+
+    - name: Formatar LV com ext4
+      filesystem:
+        fstype: ext4
+        dev: /dev/dados/ifpb
+
+    - name: Criar diretório /dados
+      file:
+        path: /dados
+        state: directory
+
+    - name: Adicionar entrada no /etc/fstab
+      mount:
+        path: /dados
+        src: /dev/dados/ifpb
+        fstype: ext4
+        opts: defaults
+        state: mounted
+
+    - name: Criar usuário nfs-ifpb sem shell
+      user:
+        name: nfs-ifpb
+        shell: /usr/sbin/nologin
+        system: yes
+
+    - name: Criar diretório do compartilhamento NFS
+      file:
+        path: /dados/nfs
+        state: directory
+        owner: nfs-ifpb
+        group: nfs-ifpb
+        mode: '0775'
+
+    - name: Obter UID e GID do usuário nfs-ifpb
+      command: id -u nfs-ifpb
+      register: nfs_uid
+
+    - name: Obter GID do grupo nfs-ifpb
+      command: id -g nfs-ifpb
+      register: nfs_gid
+
+    - name: Configurar exportação NFS
+      copy:
+        dest: /etc/exports
+        content: |
+          /dados/nfs 192.168.56.0/24(rw,sync,no_root_squash,all_squash,anonuid={{ nfs_uid.stdout }},anongid={{ nfs_gid.stdout }})
+      notify: Reiniciar NFS
+
+    - name: Configurar DHCP (dhcpd.conf)
+      copy:
+        dest: /etc/dhcp/dhcpd.conf
+        content: |
+          default-lease-time 600;
+          max-lease-time 7200;
+
+          authoritative;
+
+          subnet 192.168.56.0 netmask 255.255.255.0 {
+            range 192.168.56.50 192.168.56.100;
+            option routers 192.168.56.132;
+            option domain-name-servers 8.8.8.8, 8.8.4.4;
+          }
+      notify: Reiniciar DHCP
+
+    - name: Definir interface do DHCP em /etc/default/isc-dhcp-server
+      copy:
+        dest: /etc/default/isc-dhcp-server
+        content: |
+          INTERFACESv4="eth1"
+          INTERFACESv6=""
+      notify: Reiniciar DHCP
+
+  handlers:
+    - name: Reiniciar DHCP
+      service:
+        name: isc-dhcp-server
+        enabled: true
+        state: restarted
+
+    - name: Reiniciar NFS
+      service:
+        name: nfs-kernel-server
+        state: restarted

@@ -1,0 +1,6 @@
+---
+- import_playbook: conf-geral.yml
+- import_playbook: conf-arq.yml
+- import_playbook: conf-db.yml
+- import_playbook: conf-app.yml
+- import_playbook: conf-cli.yml

@@ -1,0 +1,59 @@
+---
+- hosts: all
+  become: true
+  tasks:
+    - name: Atualizar sistema
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Instalar chrony (NTP)
+      apt:
+        name: chrony
+        state: present
+
+    - name: Configurar timezone
+      timezone:
+        name: America/Recife
+
+    - name: Criar grupo ifpb
+      group:
+        name: ifpb
+
+    - name: Criar usuário maricleia
+      user:
+        name: maricleia
+        groups: ifpb
+        shell: /bin/bash
+        password: "{{ 'senha123' | password_hash('sha512') }}"
+        generate_ssh_key: yes
+
+    - name: Configurar sudo para ifpb
+      copy:
+        dest: /etc/sudoers.d/ifpb
+        content: "%ifpb ALL=(ALL) NOPASSWD:ALL"
+        mode: 0440
+
+    - name: Configurar mensagem de login SSH
+      copy:
+        dest: /etc/issue.net
+        content: |
+          Acesso apenas para pessoas com autorização expressa.
+          Seu acesso está sendo monitorado !!!
+
+    - name: Configurar SSHD
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^PermitRootLogin', line: 'PermitRootLogin no' }
+        - { regexp: '^PasswordAuthentication', line: 'PasswordAuthentication no' }
+        - { regexp: '^UsePAM', line: 'UsePAM yes' }
+        - { regexp: '^X11Forwarding', line: 'X11Forwarding yes' }
+        - { regexp: '^AllowGroups', line: 'AllowGroups vagrant ifpb' }
+
+    - name: Reiniciar SSH
+      service:
+        name: ssh
+        state: restarted

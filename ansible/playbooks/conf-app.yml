@@ -1,0 +1,46 @@
+---
+- hosts: app
+  become: true
+  tasks:
+    - name: Instalar Apache2 e autofs
+      apt:
+        name:
+          - apache2
+          - autofs
+        state: present
+        update_cache: yes
+
+    - name: Criar diretório caso não exista
+      file:
+        path: /var/www/html
+        state: directory
+
+    - name: Substituir index.html
+      copy:
+        src: /vagrant/ansible/files/index.html
+        dest: /var/www/html/index.html
+        owner: www-data
+        group: www-data
+        mode: '0644'
+
+    - name: Configurar autofs
+      copy:
+        dest: /etc/auto.master
+        content: |
+          /var/nfs /etc/auto.nfs --ghost
+
+    - name: Criar mapa /etc/auto.nfs
+      copy:
+        dest: /etc/auto.nfs
+        content: |
+          dados -rw,soft,intr,rsize=8192,wsize=8192 arq.maricleia.devops:/dados/nfs
+
+    - name: Reiniciar autofs
+      service:
+        name: autofs
+        state: restarted
+
+    - name: Reiniciar Apache
+      service:
+        name: apache2
+        state: restarted
