@@ -1,0 +1,47 @@
+---
+- hosts: cli
+  become: true
+  tasks:
+
+    - name: Atualizar cache e pacotes
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Instalar ferramentas básicas de rede
+      apt:
+        name:
+          - net-tools
+          - iputils-ping
+          - curl
+          - wget
+        state: present
+
+    - name: Instalar Firefox
+      apt:
+        name: firefox-esr
+        state: present
+
+    - name: Instalar NFS e autofs
+      apt:
+        name:
+          - nfs-common
+          - autofs
+        state: present
+
+    - name: Configurar auto.master para montagem NFS
+      copy:
+        dest: /etc/auto.master
+        content: |
+          /mnt/nfs /etc/auto.nfs --ghost
+
+    - name: Criar arquivo /etc/auto.nfs
+      copy:
+        dest: /etc/auto.nfs
+        content: |
+          projeto -rw,soft,intr arq.maricleia.devops:/dados/nfs
+
+    - name: Reiniciar serviço autofs
+      service:
+        name: autofs
+        state: restarted

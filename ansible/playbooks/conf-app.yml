@@ -1,0 +1,60 @@
+---
+- name: Configurar APP com Apache e Autofs
+  hosts: app
+  become: true
+  tasks:
+    - name: Instalar Apache2, autofs e nfs-common
+      apt:
+        name:
+          - apache2
+          - autofs
+          - nfs-common
+        state: present
+        update_cache: yes
+
+    - name: Criar diretório caso não exista
+      file:
+        path: /var/www/html
+        state: directory
+
+    - name: Substituir index.html
+      copy:
+        src: /vagrant/ansible/files/index.html
+        dest: /var/www/html/index.html
+        owner: www-data
+        group: www-data
+        mode: '0644'
+
+    - name: Garantir que arq.maricleia.devops esteja no /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        line: "192.168.56.132 arq.maricleia.devops"
+        state: present
+
+    - name: Criar diretório de montagem do compartilhamento
+      file:
+        path: /mnt/compartilhado
+        state: directory
+        mode: '0755'
+
+    - name: Configurar autofs (/etc/auto.master.d/shared.autofs)
+      copy:
+        dest: /etc/auto.master.d/shared.autofs
+        content: |
+          /mnt/compartilhado /etc/auto.shared --timeout=60
+
+    - name: Criar mapa de compartilhamento NFS (auto.shared)
+      copy:
+        dest: /etc/auto.shared
+        content: |
+          projeto -rw,sync arq.maricleia.devops:/compartilhado
+
+    - name: Reiniciar autofs
+      service:
+        name: autofs
+        state: restarted
+
+    - name: Reiniciar Apache
+      service:
+        name: apache2
+        state: restarted

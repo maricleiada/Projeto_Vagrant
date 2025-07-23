@@ -1,0 +1,139 @@
+---
+- hosts: arq
+  become: true
+  tasks:
+
+    # 1. Instalar pacotes necessários
+    - name: Instalar pacotes necessários
+      apt:
+        name:
+          - isc-dhcp-server
+          - nfs-kernel-server
+          - lvm2
+          - apache2
+          - nfs-common
+          - rpcbind
+        state: present
+        update_cache: yes
+
+    # 2. Criar volumes físicos
+    - name: Criar volume físico nos discos
+      command: pvcreate /dev/sdb /dev/sdc /dev/sdd
+      args:
+        creates: /dev/sdb
+
+    # 3. Criar volume group
+    - name: Criar volume group 'dados'
+      command: vgcreate dados /dev/sdb /dev/sdc /dev/sdd
+      args:
+        creates: /etc/lvm/backup/dados
+
+    # 4. Criar logical volume
+    - name: Criar logical volume 'ifpb'
+      command: lvcreate -L 15G -n ifpb dados
+      args:
+        creates: /dev/dados/ifpb
+
+    # 5. Formatar o logical volume
+    - name: Formatar LV com ext4
+      filesystem:
+        fstype: ext4
+        dev: /dev/dados/ifpb
+
+    # 6. Criar ponto de montagem e montar LV
+    - name: Criar diretório /dados
+      file:
+        path: /dados
+        state: directory
+
+    - name: Adicionar entrada no /etc/fstab e montar
+      mount:
+        path: /dados
+        src: /dev/dados/ifpb
+        fstype: ext4
+        opts: defaults
+        state: mounted
+
+    # 7. Criar usuário nfs-ifpb sem shell
+    - name: Criar usuário nfs-ifpb sem shell
+      user:
+        name: nfs-ifpb
+        shell: /usr/sbin/nologin
+        system: yes
+
+    # 8. Criar diretório para compartilhamento NFS
+    - name: Criar diretório do compartilhamento NFS
+      file:
+        path: /dados/nfs
+        state: directory
+        owner: nfs-ifpb
+        group: nfs-ifpb
+        mode: '0775'
+
+    # 9. Obter UID e GID do usuário nfs-ifpb
+    - name: Obter UID do usuário nfs-ifpb
+      command: id -u nfs-ifpb
+      register: nfs_uid
+
+    - name: Obter GID do grupo nfs-ifpb
+      command: id -g nfs-ifpb
+      register: nfs_gid
+
+    # 10. Configurar exportação NFS
+    - name: Configurar exportação NFS
+      copy:
+        dest: /etc/exports
+        content: |
+          /dados/nfs 192.168.56.0/24(rw,sync,no_root_squash,all_squash,anonuid={{ nfs_uid.stdout }},anongid={{ nfs_gid.stdout }},no_subtree_check)
+      notify: Reiniciar NFS
+
+    # 11. Ativar serviços NFS e rpcbind
+    - name: Garantir que rpcbind esteja ativo e habilitado
+      systemd:
+        name: rpcbind
+        state: started
+        enabled: yes
+
+    - name: Garantir que nfs-server esteja ativo e habilitado
+      systemd:
+        name: nfs-server
+        state: started
+        enabled: yes
+
+    # 12. Configurar DHCP
+    - name: Configurar DHCP (dhcpd.conf)
+      copy:
+        dest: /etc/dhcp/dhcpd.conf
+        content: |
+          default-lease-time 600;
+          max-lease-time 7200;
+
+          authoritative;
+
+          subnet 192.168.56.0 netmask 255.255.255.0 {
+            range 192.168.56.50 192.168.56.100;
+            option routers 192.168.56.132;
+            option domain-name-servers 8.8.8.8, 8.8.4.4;
+          }
+      notify: Reiniciar DHCP
+
+    - name: Definir interface do DHCP em /etc/default/isc-dhcp-server
+      copy:
+        dest: /etc/default/isc-dhcp-server
+        content: |
+          INTERFACESv4="eth1"
+          INTERFACESv6=""
+      notify: Reiniciar DHCP
+
+  handlers:
+    - name: Reiniciar DHCP
+      service:
+        name: isc-dhcp-server
+        state: restarted
+        enabled: true
+
+    - name: Reiniciar NFS
+      service:
+        name: nfs-kernel-server
+        state: restarted
+        enabled: true

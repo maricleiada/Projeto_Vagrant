@@ -1,0 +1,88 @@
+---
+- hosts: all
+  become: true
+  tasks:
+    - name: Atualizar sistema
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Instalar chrony (NTP)
+      apt:
+        name: chrony
+        state: present
+
+    - name: Ajustar timezone para America/Recife
+      ansible.builtin.command: timedatectl set-timezone America/Recife
+
+
+    - name: Criar grupo ifpb
+      group:
+        name: ifpb
+
+    - name: Criar usuário maricleia com senha funcional
+      user:
+        name: maricleia
+        groups: ifpb
+        shell: /bin/bash
+        password: "{{ 'senha123' | password_hash('sha512') }}"
+        generate_ssh_key: yes
+        update_password: always
+
+    - name: Criar diretório .ssh para maricleia
+      file:
+        path: /home/maricleia/.ssh
+        state: directory
+        owner: maricleia
+        group: maricleia
+        mode: '0700'
+
+    - name: Copiar chave pública do vagrant para maricleia
+      copy:
+        src: /home/vagrant/.ssh/authorized_keys
+        dest: /home/maricleia/.ssh/authorized_keys
+        remote_src: yes
+        owner: maricleia
+        group: maricleia
+        mode: '0600'
+
+    - name: Ativar autenticação por chave pública no SSH
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PubkeyAuthentication'
+        line: 'PubkeyAuthentication yes'
+
+    - name: Permitir login por senha no SSH
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication'
+        line: 'PasswordAuthentication yes'
+
+    - name: Configurar sudo para ifpb
+      copy:
+        dest: /etc/sudoers.d/ifpb
+        content: "%ifpb ALL=(ALL) NOPASSWD:ALL"
+        mode: '0440'
+
+    - name: Configurar mensagem de login SSH
+      copy:
+        dest: /etc/motd
+        content: |
+          Acesso apenas para pessoas com autorização expressa.
+          Seu acesso está sendo monitorado !!!
+
+    - name: Configurar SSHD
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^PermitRootLogin', line: 'PermitRootLogin no' }
+        - { regexp: '^UsePAM', line: 'UsePAM yes' }
+        - { regexp: '^X11Forwarding', line: 'X11Forwarding yes' }
+        - { regexp: '^AllowGroups', line: 'AllowGroups vagrant ifpb' }
+
+    - name: Reiniciar o serviço SSH
+      service:
+        name: ssh
+        state: restarted
