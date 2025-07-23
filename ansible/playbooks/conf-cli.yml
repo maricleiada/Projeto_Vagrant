@@ -33,7 +33,7 @@
       copy:
         dest: /etc/auto.master
         content: |
-          /mnt/nfs /etc/auto.nfs --ghost
+          /mnt/nfs /etc/auto.nfs
 
     - name: Criar arquivo /etc/auto.nfs
       copy:
