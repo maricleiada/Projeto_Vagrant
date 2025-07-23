@@ -23,7 +23,7 @@
       copy:
         dest: /etc/auto.master
         content: |
-          /var/nfs /etc/auto.nfs --ghost
+          /var/nfs /etc/auto.nfs 
 
     - name: Criar mapa /etc/auto.nfs
       copy:
