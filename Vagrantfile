@@ -24,7 +24,7 @@ Vagrant.configure("2") do |config|
     arq.vm.hostname = "arq.maricleia.devops"
 
     arq.vm.network "private_network",
-      ip: "192.168.56.132",
+      type: "dhcp",
       virtualbox__intnet: "rede_local",
       auto_config: true,
       adapter: 2
@@ -46,7 +46,7 @@ Vagrant.configure("2") do |config|
     db.vm.hostname = "db.maricleia.devops"
 
     db.vm.network "private_network",
-      ip: "192.168.56.155",
+      ip: "192.168.56.132",
       virtualbox__intnet: "rede_local",
       auto_config: true,
       adapter: 2
