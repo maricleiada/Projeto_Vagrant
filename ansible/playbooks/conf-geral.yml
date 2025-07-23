@@ -5,7 +5,6 @@
     - name: Atualizar sistema
       apt:
         update_cache: yes
-        upgrade: dist
 
     - name: Instalar chrony (NTP)
       apt:
